@@ -3,14 +3,22 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub fn batch_rename<P>(path: P, new_batch_name: &str) -> io::Result<()>
-where
-    P: AsRef<Path>,
-{
-    let mut files = access_dir(path)?;
-    sort_dir(&mut files);
-    rename_dir(&files, new_batch_name)
+use clap::Parser;
+
+pub fn batch_rename(params: Params) -> io::Result<usize> {
+    println!("params:{:?}", params);
+    let mut files = access_dir(params.dir_path)?;
+    sort_dir(&mut files, params.alphanumeric_sort);
+    rename_dir(&files, &params.batch_name, params.extension.as_deref())
 }
+// pub fn batch_rename<P>(path: P, new_batch_name: &str) -> io::Result<usize>
+// where
+//     P: AsRef<Path>,
+// {
+//     let mut files = access_dir(path)?;
+//     sort_dir(&mut files);
+//     rename_dir(&files, new_batch_name)
+// }
 
 fn access_dir<P>(path: P) -> io::Result<Vec<PathBuf>>
 where
@@ -24,28 +32,55 @@ where
     Ok(files)
 }
 
-fn sort_dir(files: &mut Vec<PathBuf>) {
-    files.sort_by(|a, b| alphanumeric_sort::compare_path(a, b));
+fn sort_dir(files: &mut Vec<PathBuf>, is_alphanumeric_sort: bool) {
+    if is_alphanumeric_sort {
+        files.sort_by(|a, b| alphanumeric_sort::compare_path(a, b));
+    } else {
+        files.sort();
+    }
 }
 
-fn rename_dir(files: &Vec<PathBuf>, new_batch_name: &str) -> io::Result<()> {
+fn rename_dir(files: &Vec<PathBuf>, new_batch_name: &str, ext: Option<&str>) -> io::Result<usize> {
     for (index, file) in files.iter().enumerate() {
         let new_file_name = file.parent().unwrap().display();
         fs::rename(
             file,
-            format!(r"{}\{}_{}.jpg", new_file_name, new_batch_name, index + 1),
+            format!(
+                r"{}\{}_{}.{}",
+                new_file_name,
+                new_batch_name,
+                index + 1,
+                ext.unwrap_or_else(|| { file.extension().unwrap_or_default().to_str().unwrap() })
+            ),
         )?;
     }
-    Ok(())
+    Ok(files.len())
 }
 
 // let file_name = file.file_name().unwrap().to_str().unwrap();
 // let (_, suffix) = file_name.rsplit_once('-').unwrap();
 
-#[derive(Debug)]
+#[derive(Debug, Default, Parser)]
+#[clap(author = "LZ", version = "1.0.0", about)]
+///Batch rename files in a directory. Files names use auto-number as suffix
 pub struct Params {
+    #[clap(short = 'd', long = "dir-path")]
+    #[clap(default_value = ".")]
+    ///Path to the directory. Defaults to current directory
     pub dir_path: String,
+
+    ///Prefix to be used for the renaming
+    // #[clap(short = 'n', long = "batch-name")]
     pub batch_name: String,
+
+    ///Using alphanumeric sort to rename files. Defaults to true. If set to false, regular sort will be used.
+    #[clap(short = 'a', long = "alphanumeric-sort")]
+    #[clap(default_value_t = true)]
+    pub alphanumeric_sort: bool,
+
+    ///New file extension
+    #[clap(short = 'e', long = "extension")]
+    pub extension: Option<String>,
 }
 
 impl Params {
@@ -70,6 +105,8 @@ impl Params {
         Ok(Params {
             dir_path,
             batch_name,
+            alphanumeric_sort: true,
+            extension: Some(String::from("jpg")),
         })
     }
 }

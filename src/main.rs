@@ -1,17 +1,29 @@
+use std::process;
+
 use batch_rename::Params;
-use std::{env, process};
+use clap::Parser;
+// use std::env;
 
 fn main() {
-    let mut args = env::args();
+    // let mut args = env::args();
 
-    let params = Params::build(&mut args).unwrap_or_else(|e| {
-        eprintln!("Error parsing arguments: {e}");
-        process::exit(1);
-    });
+    // let params = Params::build(&mut args).unwrap_or_else(|e| {
+    //     eprintln!("Error parsing arguments: {e}");
+    //     process::exit(1);
+    // });
 
-    println!("params: {:?}", params);
-
-    if let Err(e) = batch_rename::batch_rename(params.dir_path, &params.batch_name) {
-        eprintln!("Error processing: {}", e);
-    }
+    match Params::try_parse() {
+        Err(e) => {
+            eprintln!("Invalid params: {e}");
+            process::exit(1);
+        }
+        Ok(params) => match batch_rename::batch_rename(params) {
+            Err(e) => {
+                eprintln!("Error processing: {e}");
+            }
+            Ok(len) => {
+                println!("{len} files renamed.");
+            }
+        },
+    };
 }
