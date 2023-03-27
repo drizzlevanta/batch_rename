@@ -7,8 +7,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+///Batch renames files, excluding any directory. Create file backup, sort and batch rename.
+///Returns the number of files renamed.
 pub fn batch_rename(params: Params) -> io::Result<usize> {
-    println!("params:{:?}", params);
     let mut files = access_dir(&params.dir_path)?;
 
     backup_dir(&files, &params.dir_path)?;
@@ -59,40 +60,50 @@ where
     let path = path.as_ref().display();
     let mut counter: usize = 0;
 
-    //allocate a vector to store temp files
-    let mut pending_files: Vec<(PathBuf, PathBuf)> = Vec::new();
+    //a vector to store temp files due to name collision
+    let mut pending_files: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(files.len());
 
+    //rename files
     for (index, file) in files.iter().enumerate() {
         let new_file_name = PathBuf::from(format!(
             r"{}\{}_{}.{}",
             path,
             new_batch_name,
             index + 1,
-            ext.unwrap_or_else(|| { file.extension().unwrap_or_default().to_str().unwrap() })
+            //path is not internally represented as UTF-8 strings, instead is stored as an OsString.
+            //Convertinga Path to &str may fail.
+            // ext.unwrap_or_else(|| { file.extension().unwrap_or_default().to_str().unwrap() })
+            ext.unwrap_or_else(|| {
+                file.extension()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_default()
+            })
         ));
 
         //handle file name collision
         if new_file_name.is_file() {
-            //TODO try regular expression
             let file_stem = new_file_name.file_stem().unwrap();
-            file_stem.to_str().replace("_temp");
-            let file_ext = new_file_name.extension();
 
-            let mut temp_file_name = new_file_name.as_path().to_owned();
-            let temp = format!("{}_temp", file_stem.to_str().unwrap());
-            temp_file_name.set_file_name(temp);
-            if let Some(ext) = file_ext {
-                //preserve file extension
+            let mut temp_file_name = PathBuf::from(&new_file_name);
+
+            temp_file_name
+                .set_file_name(format!("{}_temp", file_stem.to_str().unwrap_or_default()));
+
+            //preserve file extension if present
+            if let Some(ext) = new_file_name.extension() {
                 temp_file_name.set_extension(ext);
             }
 
             //rename files to temp files
             fs::rename(file, &temp_file_name)?;
+
+            //add temp files to vector
             pending_files.push((temp_file_name, new_file_name));
             continue;
         }
 
-        //rename files which do not have any name collision
+        //rename files that do not have any name collision
         fs::rename(file, &new_file_name)?;
         counter += 1;
     }
@@ -100,7 +111,7 @@ where
     println!("Number of temp files: {}", pending_files.len());
 
     //rename temp files
-    for (from, to) in pending_files.into_iter() {
+    for (from, to) in pending_files.iter() {
         fs::rename(from, to)?;
         counter += 1;
     }
