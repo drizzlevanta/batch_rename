@@ -5,6 +5,7 @@ use crate::params::Params;
 use std::{
     fs, io,
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 ///Batch renames files, excluding any directory. Create file backup, sort and batch rename.
@@ -37,7 +38,7 @@ where
     Ok(files)
 }
 
-fn sort_dir(files: &mut Vec<PathBuf>, is_alphanumeric_sort: bool) {
+fn sort_dir(files: &mut [PathBuf], is_alphanumeric_sort: bool) {
     println!("Sorting files...");
     if is_alphanumeric_sort {
         files.sort_by(|a, b| alphanumeric_sort::compare_path(a, b));
@@ -47,7 +48,7 @@ fn sort_dir(files: &mut Vec<PathBuf>, is_alphanumeric_sort: bool) {
 }
 
 fn rename_dir<P>(
-    files: &Vec<PathBuf>,
+    files: &[PathBuf],
     new_batch_name: &str,
     ext: Option<&str>,
     path: P,
@@ -57,6 +58,8 @@ where
 {
     println!("Renaming files...");
 
+    let start = Instant::now();
+
     let path = path.as_ref().display();
     let mut counter: usize = 0;
 
@@ -64,7 +67,7 @@ where
     let mut pending_files: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(files.len());
 
     //rename files
-    for (index, file) in files.iter().enumerate() {
+    for (index, file) in files.iter().enumerate().rev() {
         let new_file_name = PathBuf::from(format!(
             r"{}\{}_{}.{}",
             path,
@@ -116,11 +119,15 @@ where
         counter += 1;
     }
 
+    let end = Instant::now();
+    let duration = end - start;
+    println!("Time elapsed: {:?}", duration);
+
     //return the number of files renamed
     Ok(counter)
 }
 
-fn backup_dir<P>(files: &Vec<PathBuf>, dir: P) -> io::Result<()>
+fn backup_dir<P>(files: &[PathBuf], dir: P) -> io::Result<()>
 where
     P: AsRef<Path>,
 {
